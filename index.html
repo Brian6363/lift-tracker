@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Lift Tracker" />
+  <title>Brian's Lift Tracker</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #0d0d0d;
+      color: #f0f0f0;
+      font-family: Georgia, serif;
+      min-height: 100vh;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    #app {
+      max-width: 500px;
+      margin: 0 auto;
+      padding: 32px 18px 80px;
+    }
+
+    input[type=number] {
+      background: #1e1e1e;
+      border: 1px solid #3a3a3a;
+      border-radius: 6px;
+      color: #fff;
+      padding: 10px;
+      font-size: 17px;
+      width: 100%;
+      outline: none;
+      font-family: inherit;
+      -webkit-appearance: none;
+    }
+
+    button { font-family: inherit; cursor: pointer; }
+    button:active { opacity: 0.8; }
+
+    .small-btn {
+      background: transparent;
+      border: 1px solid #444;
+      color: #aaa;
+      border-radius: 6px;
+      width: 38px;
+      height: 38px;
+      font-size: 22px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .screen { display: none; }
+    .screen.active { display: block; }
+
+    /* Header */
+    .header { margin-bottom: 30px; }
+    .header-sub { font-size: 13px; color: #666; text-transform: uppercase; letter-spacing: 3px; margin-bottom: 4px; }
+    .header-title { font-size: 36px; font-weight: 900; color: #fff; letter-spacing: -1px; line-height: 1; }
+
+    /* Sync badge */
+    .sync-badge { font-size: 13px; font-weight: 600; margin-top: 8px; min-height: 20px; }
+
+    /* Today badge */
+    .today-badge { font-size: 15px; color: #3dcc88; margin-top: 8px; font-weight: 600; }
+
+    /* Section label */
+    .section-label { font-size: 12px; color: #666; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 12px; }
+
+    /* Suggested button */
+    .suggested-btn {
+      width: 100%;
+      border: none;
+      border-radius: 12px;
+      padding: 22px;
+      cursor: pointer;
+      text-align: left;
+      position: relative;
+      overflow: hidden;
+      margin-bottom: 26px;
+    }
+    .suggested-btn .bg-icon {
+      font-size: 72px;
+      font-weight: 900;
+      color: rgba(0,0,0,0.12);
+      position: absolute;
+      right: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      line-height: 1;
+      pointer-events: none;
+    }
+    .suggested-btn .tap-label { font-size: 12px; color: rgba(0,0,0,0.45); text-transform: uppercase; letter-spacing: 2px; margin-bottom: 4px; }
+    .suggested-btn .day-name { font-size: 26px; font-weight: 800; color: #000; letter-spacing: -0.5px; }
+    .suggested-btn .ex-count { font-size: 15px; color: rgba(0,0,0,0.45); margin-top: 4px; }
+
+    /* All workouts grid */
+    .workout-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 28px; }
+    .workout-card {
+      background: #141414;
+      border: 1px solid #2a2a2a;
+      border-radius: 10px;
+      padding: 14px 16px;
+      cursor: pointer;
+      text-align: left;
+    }
+    .workout-card.suggested { background: #1e1e1e; }
+    .workout-card .card-icon { font-size: 24px; }
+    .workout-card .card-name { font-size: 17px; font-weight: 700; margin-top: 6px; }
+    .workout-card .card-count { font-size: 13px; color: #666; margin-top: 3px; }
+
+    /* Week grid */
+    .week-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; margin-bottom: 28px; }
+    .week-cell { text-align: center; background: #141414; border-radius: 8px; padding: 10px 4px; border: 1px solid #1e1e1e; }
+    .week-cell .wday { font-size: 11px; color: #555; margin-bottom: 5px; }
+    .week-cell .wlabel { font-size: 15px; font-weight: 800; color: #333; }
+
+    /* Cardio note */
+    .cardio-note { background: #141414; border: 1px solid #252525; border-radius: 10px; padding: 14px 16px; margin-bottom: 14px; font-size: 15px; color: #aaa; line-height: 1.7; }
+    .cardio-note strong { color: #fff; }
+
+    /* History / View button */
+    .outline-btn { width: 100%; background: transparent; border: 1px solid #333; border-radius: 10px; padding: 15px; color: #aaa; font-size: 16px; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 10px; }
+
+    /* Drive info */
+    .drive-info { background: #141414; border: 1px solid #252525; border-radius: 10px; padding: 12px 16px; font-size: 13px; color: #555; line-height: 1.7; text-align: center; }
+    .drive-info span { color: #888; }
+    .drive-info em { color: #666; }
+
+    /* Footer note */
+    .footer-note { margin-top: 22px; font-size: 13px; color: #3a3a3a; text-align: center; line-height: 1.8; }
+
+    /* ── Workout screen ── */
+    .workout-header { display: flex; align-items: center; gap: 14px; margin-bottom: 26px; }
+    .workout-header-sub { font-size: 12px; color: #666; text-transform: uppercase; letter-spacing: 2px; }
+    .workout-header-title { font-size: 28px; font-weight: 800; letter-spacing: -0.5px; line-height: 1.1; }
+
+    /* Exercise card */
+    .ex-card { background: #161616; border: 1px solid #2a2a2a; border-radius: 10px; padding: 16px; margin-bottom: 14px; }
+    .ex-card-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
+    .ex-name { font-weight: 700; font-size: 19px; color: #fff; line-height: 1.3; }
+    .ex-note { font-size: 14px; margin-top: 4px; font-style: italic; }
+    .ex-type { font-size: 12px; color: #555; margin-top: 3px; text-transform: uppercase; letter-spacing: 1.5px; }
+    .ex-btns { display: flex; gap: 8px; }
+
+    .set-headers { display: grid; grid-template-columns: 34px 1fr 1fr auto; gap: 8px; margin-bottom: 6px; }
+    .set-headers span { font-size: 12px; color: #555; text-transform: uppercase; letter-spacing: 1.5px; }
+
+    .set-row { display: grid; grid-template-columns: 34px 1fr 1fr auto; gap: 8px; align-items: center; margin-bottom: 8px; }
+    .set-row.timed, .set-row.reps { grid-template-columns: 34px 1fr auto; }
+    .set-num { color: #555; font-size: 15px; text-align: center; font-weight: 700; }
+    .set-unit { color: #777; font-size: 15px; white-space: nowrap; }
+
+    /* Save button */
+    .save-btn { width: 100%; padding: 17px; border: none; border-radius: 10px; color: #000; font-size: 18px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; margin-top: 10px; transition: background 0.2s, color 0.2s; }
+
+    /* Saved confirmation */
+    .saved-screen { display: flex; align-items: center; justify-content: center; height: 60vh; flex-direction: column; gap: 16px; }
+    .saved-check { font-size: 70px; color: #3dcc88; }
+    .saved-text { color: #f0f0f0; font-weight: 700; font-size: 24px; }
+
+    /* History screen */
+    .history-header { display: flex; align-items: center; gap: 14px; margin-bottom: 26px; }
+    .history-title { font-size: 26px; font-weight: 800; color: #f0f0f0; }
+    .history-empty { color: #555; text-align: center; margin-top: 60px; font-size: 17px; }
+    .history-card { background: #161616; border: 1px solid #252525; border-radius: 10px; padding: 14px 16px; margin-bottom: 12px; }
+    .history-card-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+    .history-day-name { font-weight: 700; font-size: 18px; }
+    .history-date { color: #777; font-size: 15px; }
+    .history-ex-row { font-size: 15px; margin-bottom: 4px; display: flex; justify-content: space-between; }
+    .history-ex-name { color: #bbb; }
+    .history-ex-data { color: #666; font-family: monospace; font-size: 14px; }
+
+    /* Loading screen */
+    .loading-screen { display: flex; align-items: center; justify-content: center; height: 100vh; flex-direction: column; gap: 16px; }
+    .loading-spin { font-size: 32px; color: #555; animation: spin 1.2s linear infinite; }
+    @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    .loading-text { color: #555; letter-spacing: 3px; font-size: 14px; text-transform: uppercase; }
+  </style>
+</head>
+<body>
+<div id="app">
+  <div id="screen-loading" class="screen active loading-screen">
+    <div class="loading-spin">⟳</div>
+    <div class="loading-text">Loading from Drive…</div>
+  </div>
+
+  <div id="screen-home" class="screen">
+    <!-- filled by JS -->
+  </div>
+
+  <div id="screen-workout" class="screen">
+    <!-- filled by JS -->
+  </div>
+
+  <div id="screen-history" class="screen">
+    <!-- filled by JS -->
+  </div>
+</div>
+
+<script>
+// ─── Program ──────────────────────────────────────────────────────────────────
+const PROGRAM = {
+  A: { label: "Push Day", icon: "↑", color: "#ff6b3d", exercises: [
+    { id: "bench", name: "Barbell Bench Press", type: "barbell" },
+    { id: "ohp", name: "Overhead Press", type: "barbell" },
+    { id: "lateral", name: "Lateral Raises", type: "dumbbell" },
+    { id: "tricep", name: "Tricep Pushdowns", type: "cable" },
+  ]},
+  B: { label: "Pull Day", icon: "↓", color: "#4d9fff", exercises: [
+    { id: "lat", name: "Lat Pulldown", type: "cable" },
+    { id: "row", name: "Barbell Rows", type: "barbell" },
+    { id: "curl", name: "Bicep Curls", type: "dumbbell" },
+    { id: "facepull", name: "Face Pulls", type: "cable" },
+    { id: "wrist", name: "Wrist Curls", type: "dumbbell" },
+    { id: "grip", name: "Grip Strengthener", type: "accessory" },
+  ]},
+  C: { label: "Floor & Core", icon: "▣", color: "#3dcc88", exercises: [
+    { id: "plank", name: "Plank", type: "timed" },
+    { id: "deadbug", name: "Dead Bug", type: "reps" },
+    { id: "bridge", name: "Glute Bridges", type: "reps" },
+    { id: "legraise", name: "Lying Leg Raises", type: "reps" },
+    { id: "superman", name: "Superman Holds", type: "timed" },
+  ]},
+  D: { label: "Legs (Progressive)", icon: "⚡", color: "#f5c842", exercises: [
+    { id: "goblet", name: "Goblet Squat", type: "dumbbell", note: "Start light, shallow ROM" },
+    { id: "squat", name: "Barbell Squat", type: "barbell", note: "Add when foot is ready" },
+    { id: "rdl", name: "Romanian Deadlift", type: "barbell", note: "Progress after squats" },
+    { id: "wallsit", name: "Wall Sit", type: "timed" },
+    { id: "glutebridge_weighted", name: "Weighted Glute Bridge", type: "barbell" },
+  ]},
+};
+
+const WEEK = ["A","B","C","A","B","rest","rest"];
+const DAYNAMES = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+const DRIVE_FILE = "brian_lift_tracker.json";
+const LOCAL_KEY = "brian_workout_v1";
+const DEFAULT_SET = { reps: 10, weight: 0, seconds: 30 };
+
+// ─── State ────────────────────────────────────────────────────────────────────
+let appData = { sessions: {}, lastDay: null };
+let currentView = "loading";
+let activeDay = null;
+let currentSession = {};
+let syncStatus = "idle";
+let saving = false;
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+function todayKey() { return new Date().toISOString().split("T")[0]; }
+function formatDate(k) {
+  return new Date(k + "T12:00:00").toLocaleDateString("en-US", { month:"short", day:"numeric" });
+}
+function localLoad() {
+  try { const r = localStorage.getItem(LOCAL_KEY); return r ? JSON.parse(r) : { sessions:{}, lastDay:null }; }
+  catch { return { sessions:{}, lastDay:null }; }
+}
+function localSave(d) { try { localStorage.setItem(LOCAL_KEY, JSON.stringify(d)); } catch {} }
+
+// ─── Drive via Anthropic API ──────────────────────────────────────────────────
+async function callDrive(msg) {
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 1000,
+      system: `You are a Google Drive file manager. You ONLY interact with "${DRIVE_FILE}" in the user's Google Drive root. Respond ONLY with valid JSON, no markdown, no explanation. When reading: return file contents as JSON. When writing: save the JSON and return {"success":true}. If file doesn't exist: return {"sessions":{},"lastDay":null}.`,
+      messages: [{ role: "user", content: msg }],
+      mcp_servers: [{ type:"url", url:"https://drivemcp.googleapis.com/mcp/v1", name:"gdrive" }],
+    }),
+  });
+  const data = await res.json();
+  const tb = data.content?.find(b => b.type === "text");
+  if (!tb) throw new Error("No text block");
+  return JSON.parse(tb.text.replace(/```json|```/g,"").trim());
+}
+
+async function loadFromDrive() {
+  try {
+    return await callDrive(`Read "${DRIVE_FILE}" from my Google Drive and return its JSON contents. If missing, return {"sessions":{},"lastDay":null}.`);
+  } catch(e) { console.warn("Drive load failed:", e); return null; }
+}
+
+async function saveToDrive(data) {
+  try {
+    await callDrive(`Save this JSON to "${DRIVE_FILE}" in my Google Drive root (create or overwrite): ${JSON.stringify(data)}`);
+    return true;
+  } catch(e) { console.warn("Drive save failed:", e); return false; }
+}
+
+// ─── Sync badge ───────────────────────────────────────────────────────────────
+function syncBadgeHTML() {
+  const map = {
+    idle: "",
+    syncing: `<div class="sync-badge" style="color:#f5c842">⟳ Syncing to Drive…</div>`,
+    synced: `<div class="sync-badge" style="color:#3dcc88">✓ Synced to Drive</div>`,
+    local: `<div class="sync-badge" style="color:#aaa">⚠ Saved locally only</div>`,
+    error: `<div class="sync-badge" style="color:#ff6b3d">✗ Drive sync failed</div>`,
+  };
+  return map[syncStatus] || "";
+}
+
+// ─── Render ───────────────────────────────────────────────────────────────────
+function showScreen(name) {
+  document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
+  document.getElementById("screen-" + name).classList.add("active");
+  currentView = name;
+  window.scrollTo(0,0);
+}
+
+function renderHome() {
+  const lastDay = appData.lastDay;
+  const order = ["A","B","C","D"];
+  const nextIdx = lastDay ? (order.indexOf(lastDay) + 1) % order.length : 0;
+  const suggested = order[nextIdx];
+  const day = PROGRAM[suggested];
+  const todayS = appData.sessions[todayKey()];
+
+  let html = `
+    <div class="header">
+      <div class="header-sub">Brian's</div>
+      <div class="header-title">LIFT TRACKER</div>
+      ${syncBadgeHTML()}
+      ${todayS ? `<div class="today-badge">✓ ${PROGRAM[todayS.dayType]?.label} logged today</div>` : ""}
+    </div>
+
+    <div class="section-label">${lastDay ? "Up Next" : "Start Here"}</div>
+    <button class="suggested-btn" style="background:${day.color}" onclick="startWorkout('${suggested}')">
+      <div class="bg-icon">${day.icon}</div>
+      <div class="tap-label">Tap to start</div>
+      <div class="day-name">${day.label}</div>
+      <div class="ex-count">${day.exercises.length} exercises</div>
+    </button>
+
+    <div class="section-label">All Workouts</div>
+    <div class="workout-grid">
+      ${Object.entries(PROGRAM).map(([k,d]) => `
+        <button class="workout-card${k===suggested?" suggested":""}" style="${k===suggested?`border-color:${d.color}88`:""}" onclick="startWorkout('${k}')">
+          <div class="card-icon">${d.icon}</div>
+          <div class="card-name" style="color:${d.color}">${d.label}</div>
+          <div class="card-count">${d.exercises.length} exercises</div>
+        </button>
+      `).join("")}
+    </div>
+
+    <div class="section-label">Suggested Week</div>
+    <div class="week-grid">
+      ${WEEK.map((d,i) => {
+        const pd = d !== "rest" ? PROGRAM[d] : null;
+        return `<div class="week-cell" style="${pd?`border-color:${pd.color}44`:""}">
+          <div class="wday">${DAYNAMES[i]}</div>
+          <div class="wlabel" style="color:${pd?pd.color:"#333"}">${d!=="rest"?d:"–"}</div>
+        </div>`;
+      }).join("")}
+    </div>
+
+    <div class="cardio-note"><strong>Daily:</strong> 15 min walk · Peloton on rest days (zero foot impact)</div>
+    <button class="outline-btn" onclick="renderHistory()">View History →</button>
+    <div class="drive-info">
+      Syncs to <span>${DRIVE_FILE}</span> in your Google Drive.<br>
+      Ask Claude: <em>"Check my workout data"</em>
+    </div>
+    <div class="footer-note">Leg Day — start with goblet squats.<br>Progress to barbell when foot allows.</div>
+  `;
+
+  document.getElementById("screen-home").innerHTML = html;
+  showScreen("home");
+}
+
+function startWorkout(dayType) {
+  const today = todayKey();
+  const existing = appData.sessions[today]?.dayType === dayType ? appData.sessions[today].data : {};
+  activeDay = dayType;
+  currentSession = JSON.parse(JSON.stringify(existing));
+  renderWorkout();
+}
+
+function getSetData(exId) {
+  return currentSession[exId]?.sets || [Object.assign({}, DEFAULT_SET)];
+}
+
+function updateSet(exId, setIdx, field, value) {
+  if (!currentSession[exId]) currentSession[exId] = { sets: [Object.assign({}, DEFAULT_SET)] };
+  currentSession[exId].sets[setIdx][field] = value;
+}
+
+function addSet(exId) {
+  if (!currentSession[exId]) currentSession[exId] = { sets: [Object.assign({}, DEFAULT_SET)] };
+  const sets = currentSession[exId].sets;
+  sets.push(Object.assign({}, sets[sets.length-1] || DEFAULT_SET));
+  renderWorkout();
+}
+
+function removeSet(exId) {
+  if (!currentSession[exId]) return;
+  const sets = currentSession[exId].sets;
+  if (sets.length > 1) { sets.pop(); renderWorkout(); }
+}
+
+function renderSetRow(ex, set, idx) {
+  const t = ex.type;
+  const n = ex.id;
+  if (t === "timed") return `
+    <div class="set-row timed">
+      <div class="set-num">${idx+1}</div>
+      <input type="number" value="${set.seconds||30}" onchange="updateSet('${n}',${idx},'seconds',+this.value)" placeholder="sec">
+      <div class="set-unit">seconds</div>
+    </div>`;
+  if (t === "reps" || t === "accessory") return `
+    <div class="set-row reps">
+      <div class="set-num">${idx+1}</div>
+      <input type="number" value="${set.reps||10}" onchange="updateSet('${n}',${idx},'reps',+this.value)" placeholder="reps">
+      <div class="set-unit">reps</div>
+    </div>`;
+  return `
+    <div class="set-row">
+      <div class="set-num">${idx+1}</div>
+      <input type="number" value="${set.reps||10}" onchange="updateSet('${n}',${idx},'reps',+this.value)" placeholder="reps">
+      <input type="number" value="${set.weight||0}" onchange="updateSet('${n}',${idx},'weight',+this.value)" placeholder="lbs">
+      <div class="set-unit">lbs</div>
+    </div>`;
+}
+
+function renderExCard(ex, accentColor) {
+  const sets = getSetData(ex.id);
+  const showHeaders = !["timed","reps","accessory"].includes(ex.type);
+  return `
+    <div class="ex-card" style="border-left:4px solid ${accentColor}">
+      <div class="ex-card-top">
+        <div style="flex:1;padding-right:10px">
+          <div class="ex-name">${ex.name}</div>
+          ${ex.note ? `<div class="ex-note" style="color:${accentColor}">⚠ ${ex.note}</div>` : ""}
+          <div class="ex-type">${ex.type}</div>
+        </div>
+        <div class="ex-btns">
+          <button class="small-btn" onclick="removeSet('${ex.id}')">−</button>
+          <button class="small-btn" style="border-color:${accentColor};color:${accentColor}" onclick="addSet('${ex.id}')">+</button>
+        </div>
+      </div>
+      ${showHeaders ? `<div class="set-headers"><span></span><span>Reps</span><span>Weight</span><span></span></div>` : ""}
+      ${sets.map((s,i) => renderSetRow(ex, s, i)).join("")}
+    </div>`;
+}
+
+function renderWorkout() {
+  const day = PROGRAM[activeDay];
+  const btnStyle = saving
+    ? `background:#555;color:#999;cursor:not-allowed`
+    : `background:${day.color};color:#000;cursor:pointer`;
+
+  const html = `
+    <div class="workout-header">
+      <button class="small-btn" style="font-size:22px" onclick="renderHome()">←</button>
+      <div>
+        <div class="workout-header-sub">Today's Workout</div>
+        <div class="workout-header-title" style="color:${day.color}">${day.icon} ${day.label}</div>
+      </div>
+    </div>
+    ${day.exercises.map(ex => renderExCard(ex, day.color)).join("")}
+    <button class="save-btn" style="${btnStyle}" onclick="handleSave()" ${saving?"disabled":""}>
+      ${saving ? "Saving to Drive…" : "Save Workout ✓"}
+    </button>
+  `;
+  document.getElementById("screen-workout").innerHTML = html;
+  showScreen("workout");
+}
+
+function renderSaved() {
+  document.getElementById("screen-workout").innerHTML = `
+    <div class="saved-screen">
+      <div class="saved-check">✓</div>
+      <div class="saved-text">Workout Saved!</div>
+      ${syncBadgeHTML()}
+    </div>`;
+  showScreen("workout");
+}
+
+async function handleSave() {
+  if (saving) return;
+  const key = todayKey();
+  const updated = {
+    ...appData,
+    sessions: {
+      ...appData.sessions,
+      [key]: { dayType: activeDay, data: currentSession, completedAt: new Date().toISOString() },
+    },
+    lastDay: activeDay,
+  };
+
+  saving = true;
+  syncStatus = "syncing";
+  localSave(updated);
+  appData = updated;
+  renderSaved();
+
+  const ok = await saveToDrive(updated);
+  saving = false;
+  syncStatus = ok ? "synced" : "local";
+  renderSaved(); // re-render to show final sync status
+
+  setTimeout(() => renderHome(), 1600);
+}
+
+function renderHistory() {
+  const keys = Object.keys(appData.sessions).sort().reverse();
+  const rows = keys.map(dateKey => {
+    const s = appData.sessions[dateKey];
+    const day = PROGRAM[s.dayType];
+    if (!day) return "";
+    const exRows = day.exercises.map(ex => {
+      const ed = s.data?.[ex.id];
+      if (!ed?.sets) return "";
+      const summary = ed.sets.map(set => {
+        if (ex.type==="timed") return `${set.seconds}s`;
+        if (ex.type==="reps"||ex.type==="accessory") return `${set.reps}r`;
+        return `${set.reps}×${set.weight}lb`;
+      }).join("  ");
+      return `<div class="history-ex-row"><span class="history-ex-name">${ex.name}</span><span class="history-ex-data">${summary}</span></div>`;
+    }).join("");
+
+    return `
+      <div class="history-card" style="border-left:4px solid ${day.color}">
+        <div class="history-card-top">
+          <span class="history-day-name" style="color:${day.color}">${day.icon} ${day.label}</span>
+          <span class="history-date">${formatDate(dateKey)}</span>
+        </div>
+        ${exRows}
+      </div>`;
+  }).join("");
+
+  document.getElementById("screen-history").innerHTML = `
+    <div class="history-header">
+      <button class="small-btn" style="font-size:22px" onclick="renderHome()">←</button>
+      <div class="history-title">Session History</div>
+    </div>
+    ${keys.length === 0 ? '<div class="history-empty">No sessions logged yet.</div>' : rows}
+  `;
+  showScreen("history");
+}
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+(async function init() {
+  showScreen("loading");
+  const driveData = await loadFromDrive();
+  if (driveData && driveData.sessions !== undefined) {
+    appData = driveData;
+    localSave(appData);
+    syncStatus = "synced";
+  } else {
+    appData = localLoad();
+    syncStatus = "local";
+  }
+  renderHome();
+})();
+</script>
+</body>
+</html>
