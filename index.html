@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -43,6 +43,7 @@
     .workout-header { display: flex; align-items: center; gap: 14px; margin-bottom: 26px; }
     .workout-header-sub { font-size: 12px; color: #666; text-transform: uppercase; letter-spacing: 2px; }
     .workout-header-title { font-size: 28px; font-weight: 800; letter-spacing: -0.5px; line-height: 1.1; }
+    .coach-tip { background: #1a1a1a; border: 1px solid #333; border-radius: 8px; padding: 10px 14px; margin-bottom: 10px; font-size: 14px; color: #f5c842; font-style: italic; line-height: 1.5; }
     .ex-card { background: #161616; border: 1px solid #2a2a2a; border-radius: 10px; padding: 16px; margin-bottom: 14px; }
     .ex-card-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
     .ex-name { font-weight: 700; font-size: 19px; color: #fff; line-height: 1.3; }
@@ -74,6 +75,8 @@
 <body>
 <div id="app"></div>
 <script>
+var ANTHROPIC_API_KEY = localStorage.getItem("brian_api_key") || "";
+
 var PROGRAM = {
   A: { label:"Push Day", icon:"↑", color:"#ff6b3d", exercises:[
     {id:"bench",   name:"Barbell Bench Press", type:"barbell"},
@@ -104,29 +107,100 @@ var PROGRAM = {
     {id:"gbheavy",  name:"Weighted Glute Bridge",  type:"barbell"}
   ]}
 };
-var WEEK=["A","B","C","A","B","rest","rest"], DAYNAMES=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
-var LOCAL_KEY="brian_lift_v2", DRIVE_FILE="brian_lift_tracker.json";
-var DEF={reps:10,weight:0,seconds:30};
-var view="home", activeDay=null, session={}, syncStatus="local", appData={sessions:{},lastDay:null};
 
+var WEEK=["A","B","C","A","B","rest","rest"], DAYNAMES=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+var LOCAL_KEY="brian_lift_v2", DRIVE_FILE="brian_lift_tracker.json", PRESCRIPTION_FILE="brian_lift_prescription.json";
+var DEF={reps:10,weight:0,seconds:30};
+var view="home", activeDay=null, session={}, syncStatus="local", appData={sessions:{},lastDay:null}, prescriptions={};
+
+// ── Local storage ─────────────────────────────────────────────────────────────
 function lLoad(){try{var r=localStorage.getItem(LOCAL_KEY);if(r){var p=JSON.parse(r);if(p&&p.sessions)return p;}}catch(e){}return{sessions:{},lastDay:null};}
 function lSave(d){try{localStorage.setItem(LOCAL_KEY,JSON.stringify(d));}catch(e){}}
+function pLoad(){try{var r=localStorage.getItem(LOCAL_KEY+"_rx");if(r)return JSON.parse(r);}catch(e){}return{};}
+function pSave(d){try{localStorage.setItem(LOCAL_KEY+"_rx",JSON.stringify(d));}catch(e){}}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
 function todayKey(){return new Date().toISOString().split("T")[0];}
 function fmtDate(k){return new Date(k+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric"});}
-
 function syncHTML(){
-  var m={local:'<div class="sync-badge" style="color:#888">💾 Saved on device</div>',syncing:'<div class="sync-badge" style="color:#f5c842">⟳ Syncing…</div>',synced:'<div class="sync-badge" style="color:#3dcc88">✓ Synced to Drive</div>'};
+  var m={local:'<div class="sync-badge" style="color:#888">💾 Saved on device</div>',syncing:'<div class="sync-badge" style="color:#f5c842">⟳ Syncing…</div>',synced:'<div class="sync-badge" style="color:#3dcc88">✓ Synced to Drive</div>',error:'<div class="sync-badge" style="color:#ff6b3d">✗ Drive unavailable — saved locally</div>'};
   return m[syncStatus]||'';
 }
 
-function driveSave(d){
-  fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:512,system:"Manage Google Drive file '"+DRIVE_FILE+"'. Save JSON when asked, return {\"success\":true}. JSON only.",messages:[{role:"user",content:"Save to "+DRIVE_FILE+": "+JSON.stringify(d)}],mcp_servers:[{type:"url",url:"https://drivemcp.googleapis.com/mcp/v1",name:"gdrive"}]})})
-  .then(function(r){return r.json();}).then(function(){syncStatus="synced";render();}).catch(function(){});
+// ── Anthropic API call ────────────────────────────────────────────────────────
+function apiCall(system, userMsg, onSuccess, onFail) {
+  fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": ANTHROPIC_API_KEY,
+      "anthropic-version": "2023-06-01",
+      "anthropic-dangerous-direct-browser-access": "true"
+    },
+    body: JSON.stringify({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 1024,
+      system: system,
+      messages: [{role:"user", content: userMsg}],
+      mcp_servers: [{type:"url", url:"https://drivemcp.googleapis.com/mcp/v1", name:"gdrive"}]
+    })
+  })
+  .then(function(r){return r.json();})
+  .then(function(data){
+    var tb = data.content && data.content.find(function(b){return b.type==="text";});
+    if(tb) onSuccess(tb.text);
+    else onFail("No response");
+  })
+  .catch(function(e){ onFail(e.message); });
 }
 
-function getSetData(id){return(session[id]&&session[id].sets)||[Object.assign({},DEF)];}
-function ensEx(id){if(!session[id])session[id]={sets:[Object.assign({},DEF)]};}
+// ── Drive sync ────────────────────────────────────────────────────────────────
+function driveSave(d) {
+  syncStatus="syncing"; render();
+  apiCall(
+    "You manage Google Drive files. When asked to save JSON to a filename, write it to that file in the user's Drive root and return {\"success\":true}. Respond ONLY with JSON.",
+    "Save to "+DRIVE_FILE+": "+JSON.stringify(d),
+    function(){ syncStatus="synced"; lSave(d); render(); },
+    function(){ syncStatus="error"; render(); }
+  );
+}
 
+function driveLoadPrescriptions() {
+  apiCall(
+    "You manage Google Drive files. Read the requested file and return its JSON contents. If missing return {}. Respond ONLY with JSON.",
+    "Read "+PRESCRIPTION_FILE+" from my Google Drive and return its JSON contents. If missing return {}.",
+    function(text){
+      try{
+        var clean=text.replace(/```json|```/g,"").trim();
+        prescriptions=JSON.parse(clean);
+        pSave(prescriptions);
+        render();
+      }catch(e){}
+    },
+    function(){}
+  );
+}
+
+function driveSavePrescriptions(rx) {
+  prescriptions = rx;
+  pSave(rx);
+  apiCall(
+    "You manage Google Drive files. Save JSON to a file in the user's Drive root. Return {\"success\":true}. Respond ONLY with JSON.",
+    "Save to "+PRESCRIPTION_FILE+": "+JSON.stringify(rx),
+    function(){},
+    function(){}
+  );
+}
+
+// ── Session/exercise state ────────────────────────────────────────────────────
+function getSetData(id){
+  // If there's a prescription for this exercise in the active day, use it as default
+  var rx = prescriptions && prescriptions[activeDay] && prescriptions[activeDay][id];
+  if(session[id] && session[id].sets) return session[id].sets;
+  if(rx) return rx;
+  return [Object.assign({},DEF)];
+}
+function ensEx(id){if(!session[id])session[id]={sets:getSetData(id)};}
 function startWorkout(d){
   var t=todayKey(),ex=(appData.sessions[t]&&appData.sessions[t].dayType===d)?appData.sessions[t].data:{};
   activeDay=d; session=JSON.parse(JSON.stringify(ex)); view="workout"; render();
@@ -139,12 +213,18 @@ function removeSet(id){ensEx(id);var s=session[id].sets;if(s.length>1){s.pop();r
 
 function handleSave(){
   var k=todayKey();
-  appData=Object.assign({},appData,{lastDay:activeDay,sessions:Object.assign({},appData.sessions,{[k]:{dayType:activeDay,data:session,completedAt:new Date().toISOString()}})});
+  appData=Object.assign({},appData,{
+    lastDay:activeDay,
+    sessions:Object.assign({},appData.sessions,{
+      [k]:{dayType:activeDay,data:session,completedAt:new Date().toISOString()}
+    })
+  });
   syncStatus="local"; lSave(appData); view="saved"; render();
   driveSave(appData);
   setTimeout(function(){view="home";render();},1800);
 }
 
+// ── Render helpers ────────────────────────────────────────────────────────────
 function setRow(ex,set,i){
   var n=ex.id,t=ex.type;
   if(t==="timed")return'<div class="set-row-s"><div class="set-num">'+(i+1)+'</div><input type="number" value="'+(set.seconds||30)+'" onchange="updateSet(\''+n+'\','+i+',\'seconds\',+this.value)"><div class="set-unit">sec</div></div>';
@@ -153,16 +233,37 @@ function setRow(ex,set,i){
 }
 
 function exCard(ex,color){
-  var sets=getSetData(ex.id),showH=["barbell","dumbbell","cable"].indexOf(ex.type)>-1;
-  var h='<div class="ex-card" style="border-left:4px solid '+color+'"><div class="ex-card-top"><div style="flex:1;padding-right:10px"><div class="ex-name">'+ex.name+'</div>'+(ex.note?'<div class="ex-note" style="color:'+color+'">⚠ '+ex.note+'</div>':'')+'<div class="ex-type-lbl">'+ex.type+'</div></div><div class="ex-btns"><button class="small-btn" onclick="removeSet(\''+ex.id+'\')">−</button><button class="small-btn" style="border-color:'+color+';color:'+color+'" onclick="addSet(\''+ex.id+'\')">+</button></div></div>';
+  var sets=getSetData(ex.id);
+  var showH=["barbell","dumbbell","cable"].indexOf(ex.type)>-1;
+  var rx=prescriptions&&prescriptions[activeDay]&&prescriptions[activeDay][ex.id];
+  var tipHTML=rx?'<div class="coach-tip">🎯 Coach target loaded</div>':'';
+  var h='<div class="ex-card" style="border-left:4px solid '+color+'">'+tipHTML+'<div class="ex-card-top"><div style="flex:1;padding-right:10px"><div class="ex-name">'+ex.name+'</div>'+(ex.note?'<div class="ex-note" style="color:'+color+'">⚠ '+ex.note+'</div>':'')+'<div class="ex-type-lbl">'+ex.type+'</div></div><div class="ex-btns"><button class="small-btn" onclick="removeSet(\''+ex.id+'\')">−</button><button class="small-btn" style="border-color:'+color+';color:'+color+'" onclick="addSet(\''+ex.id+'\')">+</button></div></div>';
   if(showH)h+='<div class="set-headers"><span></span><span>Reps</span><span>Weight</span><span></span></div>';
   sets.forEach(function(s,i){h+=setRow(ex,s,i);});
   return h+'</div>';
 }
 
+// ── Main render ───────────────────────────────────────────────────────────────
+function saveApiKey(){
+  var key = document.getElementById("apiKeyInput").value.trim();
+  if(!key || !key.startsWith("sk-")){
+    alert("Please enter a valid API key starting with sk-");
+    return;
+  }
+  localStorage.setItem("brian_api_key", key);
+  ANTHROPIC_API_KEY = key;
+  render();
+  driveLoadPrescriptions();
+}
+
 function render(){
   var app=document.getElementById("app"); if(!app)return;
-  if(view==="saved"){app.innerHTML='<div class="saved-screen"><div class="saved-check">✓</div><div class="saved-text">Workout Saved!</div>'+syncHTML()+'</div>';return;}
+
+  if(view==="saved"){
+    app.innerHTML='<div class="saved-screen"><div class="saved-check">✓</div><div class="saved-text">Workout Saved!</div>'+syncHTML()+'</div>';
+    return;
+  }
+
   if(view==="workout"){
     var day=PROGRAM[activeDay];
     var h='<div class="workout-header"><button class="small-btn" style="font-size:22px" onclick="goHome()">←</button><div><div class="workout-header-sub">Today\'s Workout</div><div class="workout-header-title" style="color:'+day.color+'">'+day.icon+' '+day.label+'</div></div></div>';
@@ -170,6 +271,7 @@ function render(){
     h+='<button class="save-btn" style="background:'+day.color+';color:#000" onclick="handleSave()">Save Workout ✓</button>';
     app.innerHTML=h; return;
   }
+
   if(view==="history"){
     var keys=Object.keys(appData.sessions).sort().reverse();
     var h='<div class="history-header"><button class="small-btn" style="font-size:22px" onclick="goHome()">←</button><div class="history-title">Session History</div></div>';
@@ -177,31 +279,50 @@ function render(){
     else keys.forEach(function(dk){
       var s=appData.sessions[dk],d=PROGRAM[s.dayType]; if(!d)return;
       h+='<div class="history-card" style="border-left:4px solid '+d.color+'"><div class="history-card-top"><span class="history-day" style="color:'+d.color+'">'+d.icon+' '+d.label+'</span><span class="history-date">'+fmtDate(dk)+'</span></div>';
-      d.exercises.forEach(function(ex){var ed=s.data&&s.data[ex.id];if(!ed||!ed.sets)return;var sum=ed.sets.map(function(set){if(ex.type==="timed")return set.seconds+"s";if(ex.type==="reps"||ex.type==="accessory")return set.reps+"r";return set.reps+"×"+set.weight+"lb";}).join("  ");h+='<div class="history-ex"><span class="history-ex-name">'+ex.name+'</span><span class="history-ex-data">'+sum+'</span></div>';});
+      d.exercises.forEach(function(ex){
+        var ed=s.data&&s.data[ex.id]; if(!ed||!ed.sets)return;
+        var sum=ed.sets.map(function(set){
+          if(ex.type==="timed")return set.seconds+"s";
+          if(ex.type==="reps"||ex.type==="accessory")return set.reps+"r";
+          return set.reps+"×"+set.weight+"lb";
+        }).join("  ");
+        h+='<div class="history-ex"><span class="history-ex-name">'+ex.name+'</span><span class="history-ex-data">'+sum+'</span></div>';
+      });
       h+='</div>';
     });
     app.innerHTML=h; return;
   }
-  // Home
+
+  // ── Home ──
   var order=["A","B","C","D"],ni=appData.lastDay?(order.indexOf(appData.lastDay)+1)%order.length:0,sug=order[ni],sd=PROGRAM[sug],ts=appData.sessions[todayKey()];
   var h='<div class="header"><div class="header-sub">Brian\'s</div><div class="header-title">LIFT TRACKER</div>'+syncHTML()+(ts?'<div class="today-badge">✓ '+PROGRAM[ts.dayType].label+' logged today</div>':'')+' </div>'
     +'<div class="section-label">'+(appData.lastDay?"Up Next":"Start Here")+'</div>'
     +'<button class="suggested-btn" style="background:'+sd.color+'" onclick="startWorkout(\''+sug+'\')">'
     +'<div class="bg-icon">'+sd.icon+'</div><div class="tap-label">Tap to start</div><div class="day-name">'+sd.label+'</div><div class="ex-count">'+sd.exercises.length+' exercises</div></button>'
     +'<div class="section-label">All Workouts</div><div class="workout-grid">';
-  Object.keys(PROGRAM).forEach(function(k){var d=PROGRAM[k],s=k===sug;h+='<button class="workout-card" style="'+(s?'background:#1e1e1e;border-color:'+d.color+'88':'')+'" onclick="startWorkout(\''+k+'\')"><div class="card-icon">'+d.icon+'</div><div class="card-name" style="color:'+d.color+'">'+d.label+'</div><div class="card-count">'+d.exercises.length+' exercises</div></button>';});
+  Object.keys(PROGRAM).forEach(function(k){
+    var d=PROGRAM[k],s=k===sug;
+    var hasPx=prescriptions&&prescriptions[k]&&Object.keys(prescriptions[k]).length>0;
+    h+='<button class="workout-card" style="'+(s?'background:#1e1e1e;border-color:'+d.color+'88':'')+'" onclick="startWorkout(\''+k+'\')">'
+      +'<div class="card-icon">'+d.icon+'</div>'
+      +'<div class="card-name" style="color:'+d.color+'">'+d.label+'</div>'
+      +'<div class="card-count">'+d.exercises.length+' exercises'+(hasPx?' · 🎯 targets set':'')+'</div></button>';
+  });
   h+='</div><div class="section-label">Suggested Week</div><div class="week-grid">';
   WEEK.forEach(function(d,i){var p=d!=="rest"?PROGRAM[d]:null;h+='<div class="week-cell" style="'+(p?'border-color:'+p.color+'44':'')+'"><div class="wday">'+DAYNAMES[i]+'</div><div class="wlabel" style="color:'+(p?p.color:"#333")+'">'+(d!=="rest"?d:"–")+'</div></div>';});
   h+='</div><div class="cardio-note"><strong>Daily:</strong> 15 min walk · Peloton on rest days</div>'
     +'<button class="outline-btn" onclick="goHistory()">View History →</button>'
-    +'<div class="drive-info">Saves on device · syncs to Google Drive in background.<br>Ask Claude: <em>"Check my workout data"</em></div>'
+    +'<div class="drive-info">Syncs to Google Drive · Ask Claude to update your targets anytime.</div>'
     +'<div class="footer-note">Leg Day — start with goblet squats.<br>Progress to barbell when foot allows.</div>';
   app.innerHTML=h;
 }
 
-// Boot — synchronous, instant
-appData=lLoad();
+// ── Boot ──────────────────────────────────────────────────────────────────────
+appData = lLoad();
+prescriptions = pLoad();
 render();
+// Load latest prescriptions from Drive in background
+driveLoadPrescriptions();
 </script>
 </body>
 </html>
