@@ -244,6 +244,20 @@ function exCard(ex,color){
 }
 
 // ── Main render ───────────────────────────────────────────────────────────────
+function showApiSetup(){
+  var app=document.getElementById("app");if(!app)return;
+  app.innerHTML='<div style="padding:40px 20px;max-width:440px;margin:0 auto">'
+    +'<div style="font-size:13px;color:#666;text-transform:uppercase;letter-spacing:3px;margin-bottom:8px">Brian\'s</div>'
+    +'<div style="font-size:32px;font-weight:900;color:#fff;margin-bottom:8px">LIFT TRACKER</div>'
+    +'<div style="font-size:15px;color:#aaa;margin-bottom:32px;line-height:1.6">Paste your Anthropic API key below. Stored on this device only.</div>'
+    +'<div style="font-size:12px;color:#666;text-transform:uppercase;letter-spacing:2px;margin-bottom:8px">Anthropic API Key</div>'
+    +'<input id="apiKeyInput" type="password" placeholder="sk-ant-..." style="background:#1e1e1e;border:1px solid #3a3a3a;border-radius:8px;color:#fff;padding:14px;font-size:16px;width:100%;outline:none;margin-bottom:16px;font-family:monospace">'
+    +'<button onclick="saveApiKey()" style="width:100%;padding:16px;background:#3dcc88;border:none;border-radius:10px;color:#000;font-size:17px;font-weight:800;cursor:pointer;font-family:inherit;margin-bottom:12px">Save & Start →</button>'
+    +'<button onclick="goHome()" style="width:100%;padding:14px;background:transparent;border:1px solid #333;border-radius:10px;color:#666;font-size:15px;cursor:pointer;font-family:inherit">Cancel</button>'
+    +'<div style="margin-top:16px;font-size:12px;color:#444;text-align:center;line-height:1.7">Get your key at console.anthropic.com<br>Key is stored locally on this device only.</div>'
+    +'</div>';
+}
+
 function saveApiKey(){
   var key = document.getElementById("apiKeyInput").value.trim();
   if(!key || !key.startsWith("sk-")){
@@ -313,7 +327,7 @@ function render(){
   h+='</div><div class="cardio-note"><strong>Daily:</strong> 15 min walk · Peloton on rest days</div>'
     +'<button class="outline-btn" onclick="goHistory()">View History →</button>'
     +'<div class="drive-info">Syncs to Google Drive · Ask Claude to update your targets anytime.</div>'
-    +'<div class="footer-note">Leg Day — start with goblet squats.<br>Progress to barbell when foot allows.</div>';
+    +'<button class="outline-btn" onclick="showApiSetup()" style="margin-top:10px;color:#444;border-color:#222">⚙ Change API Key</button>'+'<div class="footer-note">Leg Day — start with goblet squats.<br>Progress to barbell when foot allows.</div>';
   app.innerHTML=h;
 }
 
