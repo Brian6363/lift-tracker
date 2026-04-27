@@ -244,6 +244,41 @@ function exCard(ex,color){
 }
 
 // ── Main render ───────────────────────────────────────────────────────────────
+function showPasteTargets(){
+  var app=document.getElementById("app");if(!app)return;
+  app.innerHTML='<div style="padding:40px 20px;max-width:440px;margin:0 auto">'
+    +'<div style="display:flex;align-items:center;gap:14px;margin-bottom:24px">'
+    +'<button class="small-btn" style="font-size:22px" onclick="goHome()">←</button>'
+    +'<div style="font-size:26px;font-weight:800;color:#f0f0f0">Coach Targets</div></div>'
+    +'<div style="font-size:15px;color:#aaa;margin-bottom:24px;line-height:1.6">Paste the target code Claude gave you below. This pre-fills your next workout with the right weights and reps.</div>'
+    +'<div style="font-size:12px;color:#666;text-transform:uppercase;letter-spacing:2px;margin-bottom:8px">Target Code</div>'
+    +'<textarea id="rxInput" placeholder='Paste code here...' style="background:#1e1e1e;border:1px solid #3a3a3a;border-radius:8px;color:#fff;padding:14px;font-size:14px;width:100%;outline:none;font-family:monospace;height:160px;resize:none;line-height:1.5"></textarea>'
+    +'<button onclick="applyTargets()" style="width:100%;padding:16px;background:#f5c842;border:none;border-radius:10px;color:#000;font-size:17px;font-weight:800;cursor:pointer;font-family:inherit;margin-top:12px;margin-bottom:12px">Apply Targets ✓</button>'
+    +'<button onclick="clearTargets()" style="width:100%;padding:14px;background:transparent;border:1px solid #333;border-radius:10px;color:#666;font-size:15px;cursor:pointer;font-family:inherit">Clear All Targets</button>'
+    +'<div id="rxMsg" style="margin-top:16px;font-size:14px;text-align:center;min-height:20px"></div>'
+    +'</div>';
+}
+
+function applyTargets(){
+  var raw=document.getElementById("rxInput").value.trim();
+  try {
+    var rx=JSON.parse(raw);
+    prescriptions=rx;
+    pSave(rx);
+    document.getElementById("rxMsg").innerHTML='<span style="color:#3dcc88;font-weight:700">✓ Targets applied!</span>';
+    setTimeout(function(){goHome();},1000);
+  } catch(e) {
+    document.getElementById("rxMsg").innerHTML='<span style="color:#ff6b3d">✗ Invalid code — copy exactly what Claude gave you</span>';
+  }
+}
+
+function clearTargets(){
+  prescriptions={};
+  pSave({});
+  document.getElementById("rxMsg").innerHTML='<span style="color:#aaa">Targets cleared.</span>';
+  setTimeout(function(){goHome();},800);
+}
+
 function showApiSetup(){
   var app=document.getElementById("app");if(!app)return;
   app.innerHTML='<div style="padding:40px 20px;max-width:440px;margin:0 auto">'
@@ -327,7 +362,7 @@ function render(){
   h+='</div><div class="cardio-note"><strong>Daily:</strong> 15 min walk · Peloton on rest days</div>'
     +'<button class="outline-btn" onclick="goHistory()">View History →</button>'
     +'<div class="drive-info">Syncs to Google Drive · Ask Claude to update your targets anytime.</div>'
-    +'<button class="outline-btn" onclick="showApiSetup()" style="margin-top:10px;color:#444;border-color:#222">⚙ Change API Key</button>'+'<div class="footer-note">Leg Day — start with goblet squats.<br>Progress to barbell when foot allows.</div>';
+    +'<button class="outline-btn" onclick="showPasteTargets()" style="border-color:#f5c842;color:#f5c842">🎯 Paste Coach Targets</button>'+'<button class="outline-btn" onclick="showApiSetup()" style="margin-top:6px;color:#444;border-color:#222">⚙ Change API Key</button>'+'<div class="footer-note">Leg Day — start with goblet squats.<br>Progress to barbell when foot allows.</div>';
   app.innerHTML=h;
 }
 
